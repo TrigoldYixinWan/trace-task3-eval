@@ -1,0 +1,28 @@
+run_name: task3_runpod_qwen15b
+seed: 7
+
+model:
+  checkpoint: Qwen/Qwen2.5-1.5B-Instruct
+  lora_adapter: null
+  device: auto
+  dtype: bfloat16
+  max_new_tokens: 512
+  temperature: 0.2
+  top_p: 0.95
+  cache_dir: ${HF_HOME:-/workspace/.cache/huggingface}
+
+data:
+  input_jsonl: outputs/fixtures/math_loophole_eval.jsonl
+  limit: null
+
+scoring:
+  trace_scorer: heuristic_placeholder
+  use_real_trace: false
+
+outputs:
+  root: outputs/
+  rollout_jsonl: outputs/task3_runpod_qwen15b/rollouts.jsonl
+  score_jsonl: outputs/task3_runpod_qwen15b/scored_rollouts.jsonl
+  report_json: outputs/task3_runpod_qwen15b/report.json
+
+dry_run: false

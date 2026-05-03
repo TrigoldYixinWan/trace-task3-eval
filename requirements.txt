@@ -1,0 +1,12 @@
+torch
+transformers>=4.40.0
+datasets
+accelerate
+peft
+safetensors
+pandas
+numpy
+scikit-learn
+tqdm
+pyyaml
+rich
