@@ -1,7 +1,9 @@
 .env
 .venv/
+# Python cache
 __pycache__/
 *.py[cod]
+
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
@@ -16,7 +18,7 @@ rclone.conf
 secrets/
 outputs/
 checkpoints/
-data/
+/data/
 hf_cache/
 *.pt
 *.bin
