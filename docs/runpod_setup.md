@@ -85,7 +85,7 @@ python -m task3_eval.data.build_math_fixture \
 python -m task3_eval.eval.generate_rollouts \
   --dataset_path /workspace/outputs/math_ic_smoke.jsonl \
   --output_path /workspace/outputs/task3_smoke_rollouts.jsonl \
-  --base_model_name Qwen/Qwen2.5-1.5B-Instruct \
+  --base_model_name Qwen/Qwen2.5-3B-Instruct \
   --checkpoint_path base \
   --checkpoint_name base \
   --limit 5 \
@@ -111,7 +111,7 @@ Defaults:
 
 ```text
 local dir: outputs/
-remote:    gdrive:CS2952N_TRACE_Task3
+remote:    gdrive:CS2952N_TRACE_Task3/runpod_outputs
 mode:      copy
 ```
 

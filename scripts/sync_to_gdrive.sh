@@ -2,16 +2,17 @@
 set -euo pipefail
 
 LOCAL_DIR="outputs/"
-REMOTE="gdrive:CS2952N_TRACE_Task3"
+REMOTE="gdrive:CS2952N_TRACE_Task3/runpod_outputs"
 MODE="copy"
+POSITIONAL_COUNT=0
 
 usage() {
   cat <<'EOF'
-Usage: scripts/sync_to_gdrive.sh [options]
+Usage: scripts/sync_to_gdrive.sh [LOCAL_DIR] [REMOTE] [options]
 
 Options:
   --local_dir DIR   Local directory to upload. Default: outputs/
-  --remote REMOTE   rclone remote destination. Default: gdrive:CS2952N_TRACE_Task3
+  --remote REMOTE   rclone remote destination. Default: gdrive:CS2952N_TRACE_Task3/runpod_outputs
   --mode MODE       copy or sync. Default: copy
   -h, --help        Show this help.
 
@@ -40,9 +41,26 @@ while [[ $# -gt 0 ]]; do
       exit 0
       ;;
     *)
-      echo "Unknown argument: $1" >&2
-      usage >&2
-      exit 2
+      if [[ "$1" == -* ]]; then
+        echo "Unknown argument: $1" >&2
+        usage >&2
+        exit 2
+      fi
+      case "$POSITIONAL_COUNT" in
+        0)
+          LOCAL_DIR="$1"
+          ;;
+        1)
+          REMOTE="$1"
+          ;;
+        *)
+          echo "Unexpected positional argument: $1" >&2
+          usage >&2
+          exit 2
+          ;;
+      esac
+      POSITIONAL_COUNT=$((POSITIONAL_COUNT + 1))
+      shift
       ;;
   esac
 done

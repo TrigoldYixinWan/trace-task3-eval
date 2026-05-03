@@ -72,7 +72,7 @@ python -m task3_eval.data.build_math_fixture \
 
 ```python
 load_model_and_tokenizer(
-    base_model_name="Qwen/Qwen2.5-1.5B-Instruct",
+    base_model_name="Qwen/Qwen2.5-3B-Instruct",
     checkpoint_path="base",
     torch_dtype="auto",
     device_map="auto",
@@ -92,7 +92,7 @@ load_model_and_tokenizer(
 ```bash
 python -m task3_eval.models.load_checkpoint \
   --dry_run \
-  --base_model_name Qwen/Qwen2.5-1.5B-Instruct \
+  --base_model_name Qwen/Qwen2.5-3B-Instruct \
   --checkpoint_path base
 ```
 
@@ -112,7 +112,7 @@ Dry-run 生成不会加载模型，会输出带 `<answer>...</answer>` 的模拟
 python -m task3_eval.eval.generate_rollouts \
   --dataset_path outputs/datasets/math_ic_smoke.jsonl \
   --output_path outputs/task3_local_smoke/rollouts.jsonl \
-  --base_model_name Qwen/Qwen2.5-1.5B-Instruct \
+  --base_model_name Qwen/Qwen2.5-3B-Instruct \
   --checkpoint_path base \
   --checkpoint_name base \
   --limit 5 \
@@ -124,10 +124,10 @@ python -m task3_eval.eval.generate_rollouts \
 ```bash
 python -m task3_eval.eval.generate_rollouts \
   --dataset_path outputs/datasets/math_ic_eval.jsonl \
-  --output_path outputs/qwen15b_base/rollouts.jsonl \
-  --base_model_name Qwen/Qwen2.5-1.5B-Instruct \
+  --output_path outputs/qwen3b_base/rollouts.jsonl \
+  --base_model_name Qwen/Qwen2.5-3B-Instruct \
   --checkpoint_path base \
-  --checkpoint_name qwen15b_base \
+  --checkpoint_name qwen3b_base \
   --max_new_tokens 512 \
   --temperature 0.2 \
   --top_p 0.95 \
@@ -141,7 +141,7 @@ LoRA checkpoint 示例：
 python -m task3_eval.eval.generate_rollouts \
   --dataset_path outputs/datasets/math_ic_eval.jsonl \
   --output_path outputs/lora_candidate_a/rollouts.jsonl \
-  --base_model_name Qwen/Qwen2.5-1.5B-Instruct \
+  --base_model_name Qwen/Qwen2.5-3B-Instruct \
   --checkpoint_path checkpoints/lora_candidate_a \
   --checkpoint_name lora_candidate_a \
   --max_new_tokens 512 \
@@ -248,7 +248,7 @@ truncation_rate
 ```bash
 python -m task3_eval.eval.compare_checkpoints \
   --scored_paths \
-    outputs/qwen15b_base/scored_rollouts.jsonl \
+    outputs/qwen3b_base/scored_rollouts.jsonl \
     outputs/lora_candidate_a/scored_rollouts.jsonl \
   --output_csv outputs/task3_compare/summary.csv \
   --output_md outputs/task3_compare/summary.md
@@ -280,7 +280,7 @@ python -m task3_eval.data.build_math_fixture \
 python -m task3_eval.eval.generate_rollouts \
   --dataset_path outputs/datasets/math_ic_smoke.jsonl \
   --output_path outputs/task3_local_smoke/rollouts.jsonl \
-  --base_model_name Qwen/Qwen2.5-1.5B-Instruct \
+  --base_model_name Qwen/Qwen2.5-3B-Instruct \
   --checkpoint_path base \
   --checkpoint_name base \
   --limit 5 \

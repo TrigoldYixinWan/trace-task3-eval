@@ -2,7 +2,7 @@ run_name: task3_local_smoke
 seed: 7
 
 model:
-  checkpoint: Qwen/Qwen2.5-1.5B-Instruct
+  checkpoint: Qwen/Qwen2.5-3B-Instruct
   lora_adapter: null
   device: auto
   dtype: auto

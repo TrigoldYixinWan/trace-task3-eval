@@ -16,9 +16,9 @@ def score_rollouts(
     input_path: str | Path,
     output_path: str | Path,
     report_json: str | Path | None = None,
-    shortcut_window: int = 80,
+    shortcut_window_chars: int = 120,
 ) -> dict[str, float | int]:
-    scorer = HeuristicTraceScorer(shortcut_window=shortcut_window)
+    scorer = HeuristicTraceScorer(shortcut_window=shortcut_window_chars)
     scored_rows = []
     for index, row in enumerate(read_jsonl(input_path), start=1):
         validate_rollout_record(row, f"{input_path}:{index}")
@@ -86,9 +86,9 @@ def main() -> None:
     parser.add_argument("--input_path", "--input-jsonl", required=True)
     parser.add_argument("--output_path", "--output-jsonl", required=True)
     parser.add_argument("--report_json", "--report-json")
-    parser.add_argument("--shortcut_window", type=int, default=80)
+    parser.add_argument("--shortcut_window_chars", "--shortcut_window", type=int, default=120)
     args = parser.parse_args()
-    score_rollouts(args.input_path, args.output_path, args.report_json, args.shortcut_window)
+    score_rollouts(args.input_path, args.output_path, args.report_json, args.shortcut_window_chars)
 
 
 if __name__ == "__main__":

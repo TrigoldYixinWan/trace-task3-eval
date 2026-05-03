@@ -10,6 +10,7 @@ from typing import Any
 from task3_eval.data.jsonl_io import read_jsonl, write_jsonl
 from task3_eval.data.schemas import validate_dataset_record
 from task3_eval.models.load_checkpoint import DEFAULT_BASE_MODEL, load_model_and_tokenizer
+from task3_eval.utils.cli import parse_bool
 
 
 def _dry_response(example: dict[str, Any]) -> str:
@@ -70,11 +71,12 @@ def generate_rollouts(
     limit: int | None = None,
     dry_run: bool = False,
     max_new_tokens: int = 512,
-    temperature: float | None = None,
-    top_p: float | None = None,
+    temperature: float = 0.7,
+    top_p: float = 0.95,
     do_sample: bool = False,
     torch_dtype: str = "auto",
     device_map: str = "auto",
+    load_in_4bit: bool = False,
     cache_dir: str | None = None,
 ) -> int:
     rows = read_jsonl(dataset_path)
@@ -86,7 +88,14 @@ def generate_rollouts(
 
     loaded = None
     if not dry_run:
-        loaded = load_model_and_tokenizer(base_model_name, checkpoint_path, torch_dtype, device_map, cache_dir)
+        loaded = load_model_and_tokenizer(
+            base_model_name=base_model_name,
+            checkpoint_path=checkpoint_path,
+            torch_dtype=torch_dtype,
+            device_map=device_map,
+            load_in_4bit=load_in_4bit,
+            cache_dir=cache_dir,
+        )
 
     resolved_checkpoint_name = checkpoint_name or (Path(checkpoint_path).name if checkpoint_path not in (None, "base") else "base")
     generation_config = {
@@ -96,6 +105,7 @@ def generate_rollouts(
         "do_sample": do_sample,
         "torch_dtype": torch_dtype,
         "device_map": device_map,
+        "load_in_4bit": load_in_4bit,
         "dry_run": dry_run,
     }
     rollout_rows = []
@@ -144,13 +154,14 @@ def main() -> None:
     parser.add_argument("--checkpoint_name")
     parser.add_argument("--prompt_field", default="prompt")
     parser.add_argument("--limit", type=int)
-    parser.add_argument("--dry_run", "--dry-run", action="store_true")
+    parser.add_argument("--dry_run", "--dry-run", nargs="?", const=True, default=False, type=parse_bool)
     parser.add_argument("--max_new_tokens", type=int, default=512)
-    parser.add_argument("--temperature", type=float)
-    parser.add_argument("--top_p", type=float)
-    parser.add_argument("--do_sample", action="store_true")
+    parser.add_argument("--temperature", type=float, default=0.7)
+    parser.add_argument("--top_p", type=float, default=0.95)
+    parser.add_argument("--do_sample", nargs="?", const=True, default=False, type=parse_bool)
     parser.add_argument("--torch_dtype", choices=["auto", "fp16", "bf16", "fp32"], default="auto")
     parser.add_argument("--device_map", choices=["auto", "cpu"], default="auto")
+    parser.add_argument("--load_in_4bit", nargs="?", const=True, default=False, type=parse_bool)
     parser.add_argument("--cache_dir")
     args = parser.parse_args()
     count = generate_rollouts(**vars(args))

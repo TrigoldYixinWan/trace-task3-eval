@@ -8,7 +8,7 @@ correctness / shortcut-use / heuristic TRACE, and writes comparison reports.
 
 ## Status
 
-- Default model: `Qwen/Qwen2.5-1.5B-Instruct`
+- Default model: `Qwen/Qwen2.5-3B-Instruct`
 - Real TRACE: not implemented
 - Heuristic TRACE: placeholder only, clearly labeled in scorer names and reports
 - Default outputs: `outputs/`
@@ -30,7 +30,7 @@ The smoke path uses dry-run generation so it does not download a model.
 ```bash
 export PYTHONPATH=src
 INPUT_JSONL=outputs/fixtures/math_loophole_eval.jsonl \
-CHECKPOINT=Qwen/Qwen2.5-1.5B-Instruct \
+CHECKPOINT=Qwen/Qwen2.5-3B-Instruct \
 OUTPUT_DIR=outputs/task3_eval \
 bash scripts/run_task3_eval.sh
 ```

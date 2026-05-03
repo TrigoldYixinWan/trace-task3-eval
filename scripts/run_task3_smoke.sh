@@ -8,7 +8,7 @@ python -m task3_eval.eval.preflight --input-jsonl outputs/fixtures/math_loophole
 python -m task3_eval.eval.generate_rollouts \
   --dataset_path outputs/fixtures/math_loophole_smoke.jsonl \
   --output_path outputs/task3_local_smoke/rollouts.jsonl \
-  --base_model_name Qwen/Qwen2.5-1.5B-Instruct \
+  --base_model_name Qwen/Qwen2.5-3B-Instruct \
   --checkpoint_path base \
   --checkpoint_name base \
   --limit 4 \

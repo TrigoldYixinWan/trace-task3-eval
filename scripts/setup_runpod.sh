@@ -33,7 +33,7 @@ Activate the environment:
 
 Next smoke-test commands:
   python -m task3_eval.data.build_math_fixture --output /workspace/outputs/math_ic_smoke.jsonl --n 5
-  python -m task3_eval.eval.generate_rollouts --dataset_path /workspace/outputs/math_ic_smoke.jsonl --output_path /workspace/outputs/task3_smoke_rollouts.jsonl --base_model_name Qwen/Qwen2.5-1.5B-Instruct --checkpoint_path base --checkpoint_name base --limit 5 --dry_run
+  python -m task3_eval.eval.generate_rollouts --dataset_path /workspace/outputs/math_ic_smoke.jsonl --output_path /workspace/outputs/task3_smoke_rollouts.jsonl --base_model_name Qwen/Qwen2.5-3B-Instruct --checkpoint_path base --checkpoint_name base --limit 5 --dry_run
   python -m task3_eval.eval.score_rollouts --input_path /workspace/outputs/task3_smoke_rollouts.jsonl --output_path /workspace/outputs/task3_smoke_scored.jsonl --report_json /workspace/outputs/task3_smoke_report.json
 
 No tokens are stored by this script.

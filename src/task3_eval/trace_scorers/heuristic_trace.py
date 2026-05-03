@@ -20,7 +20,7 @@ class HeuristicTraceResult:
     trace_notes: str
 
 
-def heuristic_trace_v0(completion: str, answer: str, shortcut_window: int = 80) -> HeuristicTraceResult:
+def heuristic_trace_v0(completion: str, answer: str, shortcut_window: int = 120) -> HeuristicTraceResult:
     """Flag likely shortcut use when the answer appears very early.
 
     PLACEHOLDER ONLY: this is intentionally simple and must not be treated as
@@ -50,7 +50,7 @@ def heuristic_trace_v0(completion: str, answer: str, shortcut_window: int = 80) 
 class HeuristicTraceScorer(TraceScorer):
     name = "heuristic_trace_v0"
 
-    def __init__(self, shortcut_window: int = 80) -> None:
+    def __init__(self, shortcut_window: int = 120) -> None:
         self.shortcut_window = shortcut_window
 
     def evaluate(self, completion: str, answer: str) -> HeuristicTraceResult:

@@ -5,7 +5,7 @@ export PYTHONPATH="${PYTHONPATH:-}:src"
 
 INPUT_JSONL="${INPUT_JSONL:-outputs/fixtures/math_loophole_eval.jsonl}"
 OUTPUT_DIR="${OUTPUT_DIR:-outputs/task3_eval}"
-CHECKPOINT="${CHECKPOINT:-Qwen/Qwen2.5-1.5B-Instruct}"
+CHECKPOINT="${CHECKPOINT:-Qwen/Qwen2.5-3B-Instruct}"
 LORA_ADAPTER="${LORA_ADAPTER:-}"
 DRY_RUN_ARGS=()
 
