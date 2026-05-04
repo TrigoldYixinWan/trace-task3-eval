@@ -13,6 +13,7 @@ DEVICE_MAP="${DEVICE_MAP:-auto}"
 LOAD_IN_4BIT="${LOAD_IN_4BIT:-false}"
 EXTRACT_FEATURES="${EXTRACT_FEATURES:-0}"
 EXTRACT_ALL_TOKEN="${EXTRACT_ALL_TOKEN:-0}"
+PROBE_DATASET_PATH="${PROBE_DATASET_PATH:-}"
 PYTHON_BIN="${PYTHON_BIN:-}"
 
 if [[ -n "$PYTHON_BIN" ]]; then
@@ -41,7 +42,7 @@ mkdir -p \
   "$OUTPUT_DIR/probe" \
   "$OUTPUT_DIR/validation"
 
-PROBE_DATASET="$OUTPUT_DIR/probe_dataset/task3_probe_dataset.jsonl"
+PROBE_DATASET="${PROBE_DATASET_PATH:-$OUTPUT_DIR/probe_dataset/task3_probe_dataset.jsonl}"
 
 echo "==> Building probe dataset"
 "${PYTHON_CMD[@]}" -m task3_eval.probe.build_probe_dataset \

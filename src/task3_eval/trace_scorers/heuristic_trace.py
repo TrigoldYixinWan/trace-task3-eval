@@ -7,6 +7,7 @@ actual TRACE scorer contract and model/service are available.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Any
 
 from task3_eval.trace_scorers.base import TraceScorer
 
@@ -56,5 +57,26 @@ class HeuristicTraceScorer(TraceScorer):
     def evaluate(self, completion: str, answer: str) -> HeuristicTraceResult:
         return heuristic_trace_v0(completion, answer, self.shortcut_window)
 
-    def score(self, prompt: str, generated_text: str) -> float:
-        return heuristic_trace_v0(generated_text, prompt, self.shortcut_window).trace_score
+    def score(
+        self,
+        prompt: str,
+        completion: str,
+        metadata: dict[str, Any] | None = None,
+        model: Any | None = None,
+        tokenizer: Any | None = None,
+    ) -> dict[str, Any]:
+        answer = str((metadata or {}).get("answer") or "")
+        result = heuristic_trace_v0(completion, answer, self.shortcut_window)
+        return {
+            "trace_method": self.name,
+            "trace_score": result.trace_score,
+            "trace_label": result.trace_label,
+            "trace_confidence": 1.0,
+            "trace_details": {
+                "shortcut_window_chars": self.shortcut_window,
+                "shortcut_position": result.shortcut_position,
+                "shortcut_use": result.shortcut_use,
+            },
+            "trace_notes": result.trace_notes,
+            "label_source": self.name,
+        }

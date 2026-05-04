@@ -147,6 +147,20 @@ Run all configured checkpoints:
 bash scripts/run_qwen3b_checkpoint_sweep.sh
 ```
 
+For RealTrace v0 supervised scoring and Feature Policy v1 hidden-state features, first run the checkpoint-10 200-example pilot:
+
+```bash
+LIMIT=200 bash scripts/run_real_trace_v0_checkpoint10_pilot200.sh
+```
+
+If that succeeds, run the remaining 12 checkpoints:
+
+```bash
+LIMIT=200 bash scripts/run_real_trace_v0_remaining12_full.sh
+```
+
+These scripts use `real_trace_v0_prefix_ablation_3prefix`, extract pooled hidden-state features for each processed checkpoint, and save selected all-token features only for checkpoint-10 and checkpoint-70 by default.
+
 The sweep writes:
 
 ```text
@@ -276,5 +290,6 @@ mode: copy
 ## Warnings
 
 - `heuristic_trace_v0` is not real TRACE.
+- `real_trace_v0_prefix_ablation_3prefix` is a lightweight TRACE-style prefix-ablation scorer, not a full TRACE reproduction. See `docs/real_trace_v0.md`.
 - This repo is for Task 3 evaluation only, not RL training.
 - Qwen2.5-3B LoRA checkpoints must be loaded with `Qwen/Qwen2.5-3B-Instruct`, not Qwen2.5-1.5B.

@@ -11,6 +11,7 @@ from task3_eval.data.jsonl_io import read_jsonl, write_jsonl
 
 DEFAULT_OUTPUT = "outputs/probe_dataset/task3_probe_dataset.jsonl"
 LABEL_SOURCE = "heuristic_trace_v0"
+REAL_TRACE_LABEL_SOURCE = "real_trace_v0_prefix_ablation_3prefix"
 
 
 PROBE_FIELDS = (
@@ -38,8 +39,10 @@ PROBE_FIELDS = (
     "shortcut_position",
     "trace_score",
     "trace_label",
+    "trace_confidence",
     "trace_method",
     "trace_notes",
+    "trace_details",
     "completion_token_length",
     "hit_max_length",
     "generation_config",
@@ -56,6 +59,7 @@ BEHAVIOR_FIELDS = (
     "shortcut_position",
     "trace_score",
     "trace_label",
+    "trace_confidence",
     "parser_success",
     "has_answer_tag",
     "completion_token_length",
@@ -72,10 +76,11 @@ def conservative_label(scored_row: dict[str, Any]) -> tuple[int | None, str]:
     shortcut_use = bool(scored_row.get("shortcut_use", False))
     parser_success = bool(scored_row.get("parser_success", False))
     hit_max_length = bool(scored_row.get("hit_max_length", False))
+    label_source = str(scored_row.get("label_source") or scored_row.get("trace_method") or "")
     if trace_label == 1 or shortcut_use:
-        return 1, "heuristic"
+        return 1, "real_trace_v0" if label_source == REAL_TRACE_LABEL_SOURCE else "heuristic"
     if trace_label == 0 and not shortcut_use and parser_success and not hit_max_length:
-        return 0, "heuristic"
+        return 0, "real_trace_v0" if label_source == REAL_TRACE_LABEL_SOURCE else "heuristic"
     return None, "uncertain"
 
 
@@ -92,7 +97,37 @@ def _probe_row(scored_row: dict[str, Any]) -> dict[str, Any]:
     return row
 
 
-def _write_dataset_card(rows: list[dict[str, Any]], output_path: str | Path) -> None:
+def _dedupe_prefer_real_trace(rows: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], dict[str, int]]:
+    selected: dict[tuple[Any, ...], dict[str, Any]] = {}
+    source_counts: dict[str, int] = {}
+    for row in rows:
+        source = str(row.get("label_source") or row.get("trace_method") or "unknown")
+        source_counts[source] = source_counts.get(source, 0) + 1
+        key = (
+            row.get("sample_id"),
+            row.get("prompt_id"),
+            row.get("checkpoint_name"),
+            row.get("checkpoint_step"),
+            row.get("run_type"),
+        )
+        existing = selected.get(key)
+        if existing is None:
+            selected[key] = row
+            continue
+        existing_source = str(existing.get("label_source") or existing.get("trace_method") or "unknown")
+        if existing_source != REAL_TRACE_LABEL_SOURCE and source == REAL_TRACE_LABEL_SOURCE:
+            selected[key] = row
+    selected_counts: dict[str, int] = {}
+    for row in selected.values():
+        source = str(row.get("label_source") or row.get("trace_method") or "unknown")
+        selected_counts[source] = selected_counts.get(source, 0) + 1
+    source_counts["selected_rows"] = len(selected)
+    for source, count in selected_counts.items():
+        source_counts[f"selected_{source}"] = count
+    return list(selected.values()), source_counts
+
+
+def _write_dataset_card(rows: list[dict[str, Any]], output_path: str | Path, source_counts: dict[str, int]) -> None:
     card_path = Path(output_path)
     card_path.parent.mkdir(parents=True, exist_ok=True)
     steps = sorted(
@@ -126,6 +161,8 @@ Run types: {run_types}
 - `label_for_probe = null` and `label_confidence = "uncertain"` otherwise.
 
 Label counts: {label_counts}
+
+Input/selected label source counts: {source_counts}
 
 ## TRACE Warning
 
@@ -178,11 +215,14 @@ def build_probe_dataset(
     rows = []
     for input_path in inputs:
         for scored_row in read_jsonl(input_path):
-            rows.append(_probe_row(scored_row))
-    count = write_jsonl(output_path, rows)
-    _write_dataset_card(rows, dataset_card_path or Path(output_path).with_name("dataset_card.md"))
+            rows.append(scored_row)
+    selected_rows, source_counts = _dedupe_prefer_real_trace(rows)
+    probe_rows = [_probe_row(row) for row in selected_rows]
+    count = write_jsonl(output_path, probe_rows)
+    _write_dataset_card(probe_rows, dataset_card_path or Path(output_path).with_name("dataset_card.md"), source_counts)
     if behavior_features_dir:
-        _write_behavior_features(rows, behavior_features_dir)
+        _write_behavior_features(probe_rows, behavior_features_dir)
+    print(f"label_source_counts={source_counts}")
     return count
 
 

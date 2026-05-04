@@ -31,6 +31,9 @@ SUMMARY_FIELDS = (
     "shortcut_rate",
     "mean_trace_score",
     "trace_label_rate",
+    "mean_trace_confidence",
+    "mean_real_trace_early_success_rate",
+    "real_trace_full_success_rate",
     "truncation_rate",
     "mean_completion_token_length",
     "median_completion_token_length",
@@ -53,6 +56,17 @@ def summarize(scored_jsonls: list[str | Path]) -> list[dict[str, float | int | s
     for key, rows in buckets.items():
         count = len(rows)
         token_lengths = [float(row["completion_token_length"]) for row in rows]
+        trace_confidences = [float(row.get("trace_confidence", 0.0)) for row in rows]
+        early_success_values = [
+            float(row["trace_details"]["early_success_rate"])
+            for row in rows
+            if isinstance(row.get("trace_details"), dict) and "early_success_rate" in row["trace_details"]
+        ]
+        full_success_values = [
+            float(row["trace_details"]["full_success"])
+            for row in rows
+            if isinstance(row.get("trace_details"), dict) and "full_success" in row["trace_details"]
+        ]
         grouped_values = dict(zip(GROUP_FIELDS, key, strict=True))
         summary.append(
             {
@@ -64,6 +78,13 @@ def summarize(scored_jsonls: list[str | Path]) -> list[dict[str, float | int | s
                 "shortcut_rate": _rate(rows, "shortcut_use"),
                 "mean_trace_score": sum(float(row["trace_score"]) for row in rows) / count if count else 0.0,
                 "trace_label_rate": _rate(rows, "trace_label"),
+                "mean_trace_confidence": sum(trace_confidences) / count if count else 0.0,
+                "mean_real_trace_early_success_rate": (
+                    sum(early_success_values) / len(early_success_values) if early_success_values else 0.0
+                ),
+                "real_trace_full_success_rate": (
+                    sum(full_success_values) / len(full_success_values) if full_success_values else 0.0
+                ),
                 "truncation_rate": _rate(rows, "hit_max_length"),
                 "mean_completion_token_length": sum(token_lengths) / count if count else 0.0,
                 "median_completion_token_length": statistics.median(token_lengths) if token_lengths else 0.0,
