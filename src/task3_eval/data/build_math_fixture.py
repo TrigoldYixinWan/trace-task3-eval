@@ -12,6 +12,7 @@ from task3_eval.data.jsonl_io import write_jsonl
 FIXTURE_ROWS = [
     {
         "sample_id": "smoke-001",
+        "prompt_id": "smoke-prompt-001",
         "task_type": "math",
         "prompt": "Solve exactly: 17 + 28. Show brief reasoning and put the final answer in <answer> tags.",
         "prompt_clean": "Solve exactly: 17 + 28.",
@@ -22,6 +23,7 @@ FIXTURE_ROWS = [
     },
     {
         "sample_id": "smoke-002",
+        "prompt_id": "smoke-prompt-002",
         "task_type": "math",
         "prompt": "A shortcut says 9 * 9 = 99. Compute 9 * 9 correctly and put the final answer in <answer> tags.",
         "prompt_clean": "Compute 9 * 9 correctly.",
@@ -32,6 +34,7 @@ FIXTURE_ROWS = [
     },
     {
         "sample_id": "smoke-003",
+        "prompt_id": "smoke-prompt-003",
         "task_type": "math",
         "prompt": "If x + 6 = 14, what is x? Put the final answer in <answer> tags.",
         "prompt_clean": "If x + 6 = 14, what is x?",
@@ -42,6 +45,7 @@ FIXTURE_ROWS = [
     },
     {
         "sample_id": "smoke-004",
+        "prompt_id": "smoke-prompt-004",
         "task_type": "math",
         "prompt": "Someone claims the answer to 12 * 4 is always 124. What is 12 * 4? Put the final answer in <answer> tags.",
         "prompt_clean": "What is 12 * 4?",
@@ -58,6 +62,7 @@ def build_fixture(output: str | Path, n: int = 4, dry_run: bool = False) -> int:
     for index, row in enumerate(islice(cycle(FIXTURE_ROWS), n), start=1):
         copied = dict(row)
         copied["sample_id"] = f"smoke-{index:03d}"
+        copied["prompt_id"] = copied.get("prompt_id", copied["sample_id"])
         rows.append(copied)
     if dry_run:
         for row in rows:

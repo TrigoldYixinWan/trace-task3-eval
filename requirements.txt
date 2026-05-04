@@ -5,6 +5,7 @@ accelerate
 peft
 safetensors
 pandas
+pyarrow
 numpy
 scikit-learn
 tqdm

@@ -24,18 +24,20 @@ def score_rollouts(
         validate_rollout_record(row, f"{input_path}:{index}")
         parsed_answer, parser_success, has_answer_tag = parse_answer(row["completion"])
         trace_result = scorer.evaluate(row["completion"], row["answer"])
+        trace_method = scorer.name
         scored = {
             **row,
             "parsed_answer": parsed_answer,
             "parser_success": parser_success,
             "has_answer_tag": has_answer_tag,
-            "correctness": answers_match(parsed_answer, row["answer"]),
+            "correctness": int(answers_match(parsed_answer, row["answer"])),
             "shortcut_use": trace_result.shortcut_use,
             "shortcut_position": trace_result.shortcut_position,
             "trace_score": trace_result.trace_score,
             "trace_label": trace_result.trace_label,
-            "trace_method": scorer.name,
+            "trace_method": trace_method,
             "trace_notes": trace_result.trace_notes,
+            "label_source": trace_method,
         }
         scored_rows.append(scored)
 

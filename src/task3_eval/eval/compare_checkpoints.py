@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import argparse
 import csv
+import json
+import statistics
 from collections import defaultdict
 from pathlib import Path
 
@@ -11,11 +13,17 @@ from task3_eval.data.jsonl_io import read_jsonl
 
 
 SUMMARY_FIELDS = (
+    "run_type",
     "checkpoint_name",
+    "checkpoint_step",
     "checkpoint_path",
     "base_model_name",
+    "reward_type",
     "loophole_type",
     "loophole_subtype",
+    "split",
+    "trace_method",
+    "label_source",
     "n",
     "accuracy",
     "parser_success_rate",
@@ -25,7 +33,9 @@ SUMMARY_FIELDS = (
     "trace_label_rate",
     "truncation_rate",
     "mean_completion_token_length",
+    "median_completion_token_length",
 )
+GROUP_FIELDS = SUMMARY_FIELDS[:11]
 
 
 def _rate(rows: list[dict], field: str) -> float:
@@ -33,29 +43,20 @@ def _rate(rows: list[dict], field: str) -> float:
 
 
 def summarize(scored_jsonls: list[str | Path]) -> list[dict[str, float | int | str]]:
-    buckets: dict[tuple[str, str, str, str, str], list[dict]] = defaultdict(list)
+    buckets: dict[tuple[str, ...], list[dict]] = defaultdict(list)
     for scored_jsonl in scored_jsonls:
         for row in read_jsonl(scored_jsonl):
-            key = (
-                row.get("checkpoint_name", ""),
-                row.get("checkpoint_path", ""),
-                row.get("base_model_name", ""),
-                row.get("loophole_type", ""),
-                row.get("loophole_subtype", ""),
-            )
+            key = tuple(str(row.get(field, "")) for field in GROUP_FIELDS)
             buckets[key].append(row)
 
     summary = []
     for key, rows in buckets.items():
-        checkpoint_name, checkpoint_path, base_model_name, loophole_type, loophole_subtype = key
         count = len(rows)
+        token_lengths = [float(row["completion_token_length"]) for row in rows]
+        grouped_values = dict(zip(GROUP_FIELDS, key, strict=True))
         summary.append(
             {
-                "checkpoint_name": checkpoint_name,
-                "checkpoint_path": checkpoint_path,
-                "base_model_name": base_model_name,
-                "loophole_type": loophole_type,
-                "loophole_subtype": loophole_subtype,
+                **grouped_values,
                 "n": count,
                 "accuracy": _rate(rows, "correctness"),
                 "parser_success_rate": _rate(rows, "parser_success"),
@@ -64,14 +65,15 @@ def summarize(scored_jsonls: list[str | Path]) -> list[dict[str, float | int | s
                 "mean_trace_score": sum(float(row["trace_score"]) for row in rows) / count if count else 0.0,
                 "trace_label_rate": _rate(rows, "trace_label"),
                 "truncation_rate": _rate(rows, "hit_max_length"),
-                "mean_completion_token_length": (
-                    sum(float(row["completion_token_length"]) for row in rows) / count if count else 0.0
-                ),
+                "mean_completion_token_length": sum(token_lengths) / count if count else 0.0,
+                "median_completion_token_length": statistics.median(token_lengths) if token_lengths else 0.0,
             }
         )
     return sorted(
         summary,
         key=lambda row: (
+            str(row["run_type"]),
+            int(row["checkpoint_step"]) if str(row["checkpoint_step"]).isdigit() else -1,
             str(row["checkpoint_name"]),
             str(row["loophole_type"]),
             str(row["loophole_subtype"]),
@@ -114,14 +116,60 @@ def markdown_table(rows: list[dict[str, float | int | str]]) -> str:
     return "\n".join(lines) + "\n"
 
 
+def sanity_warnings(
+    inputs: list[str],
+    rows: list[dict[str, float | int | str]],
+    expected_steps: list[int] | None = None,
+    high_truncation_threshold: float = 0.2,
+    low_parser_threshold: float = 0.8,
+) -> list[str]:
+    warnings = []
+    observed_steps = {
+        int(row["checkpoint_step"])
+        for row in rows
+        if str(row.get("checkpoint_step", "")).isdigit()
+    }
+    if expected_steps:
+        missing_steps = [step for step in expected_steps if step not in observed_steps]
+        for step in missing_steps:
+            warnings.append(f"missing checkpoint outputs for checkpoint-{step}")
+    for row in rows:
+        prefix = (
+            f"{row['run_type']} {row['checkpoint_name']} "
+            f"{row['loophole_type']}/{row['loophole_subtype']}"
+        )
+        if float(row["truncation_rate"]) >= high_truncation_threshold:
+            warnings.append(f"high hit_max_length rate for {prefix}: {row['truncation_rate']}")
+        if float(row["parser_success_rate"]) <= low_parser_threshold:
+            warnings.append(f"low parser_success_rate for {prefix}: {row['parser_success_rate']}")
+
+    generation_configs = set()
+    for input_path in inputs:
+        for rollout in read_jsonl(input_path):
+            generation_configs.add(json.dumps(rollout.get("generation_config", {}), sort_keys=True))
+    if len(generation_configs) > 1:
+        warnings.append("inconsistent generation configs across checkpoint outputs")
+    return warnings
+
+
+def warnings_markdown(warnings: list[str]) -> str:
+    if not warnings:
+        return "\n## Sanity Warnings\n\nNo sanity warnings.\n"
+    lines = ["", "## Sanity Warnings", ""]
+    lines.extend(f"- {warning}" for warning in warnings)
+    return "\n".join(lines) + "\n"
+
+
 def compare_checkpoints(
     inputs: list[str],
     output_csv: str | Path | None = None,
     output_md: str | Path | None = None,
+    expected_steps: list[int] | None = None,
     dry_run: bool = False,
 ) -> list[dict[str, float | int | str]]:
     report = summarize(inputs)
-    rendered_markdown = markdown_table(report)
+    warnings = sanity_warnings(inputs, report, expected_steps)
+    rendered_markdown = markdown_table(report) + warnings_markdown(warnings)
     print(rendered_markdown, end="")
     if dry_run:
         return report
@@ -129,7 +177,9 @@ def compare_checkpoints(
         write_csv(report, output_csv)
         print(f"wrote_csv={output_csv}")
     if output_md:
-        write_markdown(report, output_md)
+        output_path = Path(output_md)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_text(rendered_markdown, encoding="utf-8")
         print(f"wrote_markdown={output_md}")
     return report
 
@@ -139,9 +189,10 @@ def main() -> None:
     parser.add_argument("--inputs", "--scored_paths", nargs="+", required=True)
     parser.add_argument("--output_csv")
     parser.add_argument("--output_md")
+    parser.add_argument("--expected_steps", nargs="*", type=int)
     parser.add_argument("--dry_run", "--dry-run", action="store_true")
     args = parser.parse_args()
-    compare_checkpoints(args.inputs, args.output_csv, args.output_md, args.dry_run)
+    compare_checkpoints(args.inputs, args.output_csv, args.output_md, args.expected_steps, args.dry_run)
 
 
 if __name__ == "__main__":

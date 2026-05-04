@@ -11,6 +11,12 @@ from task3_eval.data.jsonl_io import read_jsonl, write_jsonl
 from task3_eval.data.schemas import validate_dataset_record
 from task3_eval.models.load_checkpoint import DEFAULT_BASE_MODEL, load_model_and_tokenizer
 from task3_eval.utils.cli import parse_bool
+from task3_eval.utils.metadata import (
+    canonical_checkpoint_name,
+    infer_adapter_type,
+    infer_checkpoint_step,
+    prompt_id_for,
+)
 
 
 def _dry_response(example: dict[str, Any]) -> str:
@@ -67,13 +73,18 @@ def generate_rollouts(
     base_model_name: str = DEFAULT_BASE_MODEL,
     checkpoint_path: str | None = "base",
     checkpoint_name: str | None = None,
+    checkpoint_step: int | None = None,
+    adapter_type: str | None = None,
+    run_type: str = "hacking",
+    reward_type: str = "math_reward_with_loophole",
     prompt_field: str = "prompt",
     limit: int | None = None,
     dry_run: bool = False,
     max_new_tokens: int = 512,
-    temperature: float = 0.7,
-    top_p: float = 0.95,
+    temperature: float = 0.0,
+    top_p: float = 1.0,
     do_sample: bool = False,
+    num_return_sequences: int = 1,
     torch_dtype: str = "auto",
     device_map: str = "auto",
     load_in_4bit: bool = False,
@@ -86,6 +97,9 @@ def generate_rollouts(
         if prompt_field not in example:
             raise ValueError(f"prompt_field '{prompt_field}' missing in {dataset_path}:{index}")
 
+    if num_return_sequences != 1:
+        raise ValueError("num_return_sequences > 1 is not implemented for Task 3 MVP.")
+
     loaded = None
     if not dry_run:
         loaded = load_model_and_tokenizer(
@@ -97,12 +111,18 @@ def generate_rollouts(
             cache_dir=cache_dir,
         )
 
-    resolved_checkpoint_name = checkpoint_name or (Path(checkpoint_path).name if checkpoint_path not in (None, "base") else "base")
+    resolved_step = checkpoint_step if checkpoint_step is not None else infer_checkpoint_step(checkpoint_name, checkpoint_path)
+    resolved_checkpoint_name = checkpoint_name or canonical_checkpoint_name(
+        resolved_step,
+        Path(checkpoint_path).name if checkpoint_path not in (None, "base") else "base",
+    )
+    resolved_adapter_type = adapter_type or infer_adapter_type(checkpoint_path)
     generation_config = {
         "max_new_tokens": max_new_tokens,
         "temperature": temperature,
         "top_p": top_p,
         "do_sample": do_sample,
+        "num_return_sequences": num_return_sequences,
         "torch_dtype": torch_dtype,
         "device_map": device_map,
         "load_in_4bit": load_in_4bit,
@@ -127,9 +147,14 @@ def generate_rollouts(
         rollout_rows.append(
             {
                 "sample_id": example["sample_id"],
+                "prompt_id": prompt_id_for(example),
                 "checkpoint_name": resolved_checkpoint_name,
+                "checkpoint_step": resolved_step,
                 "checkpoint_path": checkpoint_path or "base",
                 "base_model_name": base_model_name,
+                "adapter_type": resolved_adapter_type,
+                "run_type": run_type,
+                "reward_type": reward_type,
                 "prompt": prompt,
                 "completion": completion,
                 "answer": example["answer"],
@@ -152,13 +177,18 @@ def main() -> None:
     parser.add_argument("--base_model_name", default=DEFAULT_BASE_MODEL)
     parser.add_argument("--checkpoint_path", default="base")
     parser.add_argument("--checkpoint_name")
+    parser.add_argument("--checkpoint_step", type=int)
+    parser.add_argument("--adapter_type")
+    parser.add_argument("--run_type", default="hacking")
+    parser.add_argument("--reward_type", default="math_reward_with_loophole")
     parser.add_argument("--prompt_field", default="prompt")
     parser.add_argument("--limit", type=int)
     parser.add_argument("--dry_run", "--dry-run", nargs="?", const=True, default=False, type=parse_bool)
     parser.add_argument("--max_new_tokens", type=int, default=512)
-    parser.add_argument("--temperature", type=float, default=0.7)
-    parser.add_argument("--top_p", type=float, default=0.95)
+    parser.add_argument("--temperature", type=float, default=0.0)
+    parser.add_argument("--top_p", type=float, default=1.0)
     parser.add_argument("--do_sample", nargs="?", const=True, default=False, type=parse_bool)
+    parser.add_argument("--num_return_sequences", type=int, default=1)
     parser.add_argument("--torch_dtype", choices=["auto", "fp16", "bf16", "fp32"], default="auto")
     parser.add_argument("--device_map", choices=["auto", "cpu"], default="auto")
     parser.add_argument("--load_in_4bit", nargs="?", const=True, default=False, type=parse_bool)

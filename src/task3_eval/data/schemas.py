@@ -18,9 +18,14 @@ DATASET_REQUIRED_FIELDS = (
 
 ROLLOUT_REQUIRED_FIELDS = (
     "sample_id",
+    "prompt_id",
     "checkpoint_name",
+    "checkpoint_step",
     "checkpoint_path",
     "base_model_name",
+    "adapter_type",
+    "run_type",
+    "reward_type",
     "prompt",
     "completion",
     "answer",
