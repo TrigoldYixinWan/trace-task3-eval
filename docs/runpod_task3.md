@@ -291,6 +291,60 @@ remote: gdrive:CS2952N_TRACE_Task3/runpod_outputs
 mode: copy
 ```
 
+## Clean Checkpoint-60 Control
+
+If Google Drive contains the clean checkpoint under `CS2952N_TRACE_Task3/chepoints/clean/checkpoint-60/`, copy the whole clean folder to the matching RunPod location:
+
+```bash
+mkdir -p /workspace/checkpoints/clean
+rclone copy \
+  gdrive:CS2952N_TRACE_Task3/chepoints/clean \
+  /workspace/checkpoints/clean \
+  --progress
+```
+
+If the Drive folder is actually spelled `checkpoints`, use this source path instead:
+
+```bash
+rclone copy \
+  gdrive:CS2952N_TRACE_Task3/checkpoints/clean \
+  /workspace/checkpoints/clean \
+  --progress
+```
+
+Confirm the expected copied layout:
+
+```bash
+find /workspace/checkpoints/clean/checkpoint-60 -maxdepth 1 -type f | sort
+```
+
+Run the clean control with the same formal settings as the hacking run:
+
+```bash
+LIMIT=200 \
+MAX_NEW_TOKENS=1024 \
+bash scripts/run_real_trace_v0_clean_checkpoint60.sh
+```
+
+This writes:
+
+```text
+outputs/rollouts/raw/clean_checkpoint-60_math_ic_raw.jsonl
+outputs/rollouts/scored/clean_checkpoint-60_math_ic_realtrace_scored.jsonl
+outputs/reports/clean_checkpoint-60_realtrace_trend.csv
+outputs/reports/clean_checkpoint-60_realtrace_trend.md
+outputs/probe_dataset/clean_checkpoint-60_probe_dataset.jsonl
+outputs/probe_features/pooled/clean_checkpoint-60_pooled_features.pt
+```
+
+Upload the clean-control outputs together with the rest of the Task 3 artifacts:
+
+```bash
+bash scripts/sync_to_gdrive.sh \
+  outputs/ \
+  gdrive:CS2952N_TRACE_Task3/runpod_outputs_max1024
+```
+
 ## Warnings
 
 - `heuristic_trace_v0` is not real TRACE.
