@@ -240,8 +240,11 @@ def main() -> None:
         args.behavior_features_dir,
     )
     print(f"probe_dataset_rows={count}")
-    print(f"label_source={LABEL_SOURCE}")
-    print("warning=heuristic_trace_v0 is a proxy label source, not real TRACE")
+    print("label_source=recorded_per_row")
+    print(
+        "warning=heuristic_trace_v0 is a proxy label source; "
+        "real_trace_v0_prefix_ablation_3prefix is lightweight TRACE-style scoring, not full TRACE"
+    )
 
 
 if __name__ == "__main__":

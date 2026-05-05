@@ -147,16 +147,20 @@ Run all configured checkpoints:
 bash scripts/run_qwen3b_checkpoint_sweep.sh
 ```
 
-For RealTrace v0 supervised scoring and Feature Policy v1 hidden-state features, first run the checkpoint-10 200-example pilot:
+For RealTrace v0 supervised scoring and Feature Policy v1 hidden-state features, first run the checkpoint-10 200-example pilot. The formal default is `LIMIT=200` and `MAX_NEW_TOKENS=1024`:
 
 ```bash
-LIMIT=200 bash scripts/run_real_trace_v0_checkpoint10_pilot200.sh
+LIMIT=200 \
+MAX_NEW_TOKENS=1024 \
+bash scripts/run_real_trace_v0_checkpoint10_pilot200.sh
 ```
 
 If that succeeds, run the remaining 12 checkpoints:
 
 ```bash
-LIMIT=200 bash scripts/run_real_trace_v0_remaining12_full.sh
+LIMIT=200 \
+MAX_NEW_TOKENS=1024 \
+bash scripts/run_real_trace_v0_remaining12_full.sh
 ```
 
 These scripts use `real_trace_v0_prefix_ablation_3prefix`, extract pooled hidden-state features for each processed checkpoint, and save selected all-token features only for checkpoint-10 and checkpoint-70 by default.
@@ -171,7 +175,7 @@ outputs/probe_dataset/task3_probe_dataset.jsonl
 
 ## RLFR-Ready Probe Artifacts
 
-Task 3 also prepares probe artifacts for Task 4 / RLFR handoff. These labels are heuristic TRACE proxy labels from `heuristic_trace_v0`, not real TRACE.
+Task 3 also prepares probe artifacts for Task 4 / RLFR handoff. Label provenance is recorded per row in `label_source`; current labels may come from `real_trace_v0_prefix_ablation_3prefix` or the fallback `heuristic_trace_v0`. Neither should be described as full TRACE unless a full real TRACE scorer is integrated later.
 
 After a sweep, the probe dataset is created from scored rollouts:
 

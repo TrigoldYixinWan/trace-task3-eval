@@ -60,10 +60,12 @@ Full prefix continuations are not stored by default. Set `--store_trace_completi
 
 ## Recommended Pilot
 
-Run the formal checkpoint-10 pilot with 200 examples and planned hidden-state features:
+Run the formal checkpoint-10 pilot with 200 examples, `MAX_NEW_TOKENS=1024`, and planned hidden-state features:
 
 ```bash
-LIMIT=200 bash scripts/run_real_trace_v0_checkpoint10_pilot200.sh
+LIMIT=200 \
+MAX_NEW_TOKENS=1024 \
+bash scripts/run_real_trace_v0_checkpoint10_pilot200.sh
 ```
 
 This writes:
@@ -99,7 +101,9 @@ LIMIT=50 bash scripts/run_real_trace_v0_sweep_selected.sh
 After the checkpoint-10 pilot succeeds, run the remaining checkpoints in one script:
 
 ```bash
-LIMIT=200 bash scripts/run_real_trace_v0_remaining12_full.sh
+LIMIT=200 \
+MAX_NEW_TOKENS=1024 \
+bash scripts/run_real_trace_v0_remaining12_full.sh
 ```
 
 This evaluates:

@@ -8,7 +8,7 @@ OUTPUT_DIR="${OUTPUT_DIR:-outputs}"
 RUN_TYPE="${RUN_TYPE:-hacking}"
 REWARD_TYPE="${REWARD_TYPE:-math_reward_with_loophole}"
 LIMIT="${LIMIT:-200}"
-MAX_NEW_TOKENS="${MAX_NEW_TOKENS:-512}"
+MAX_NEW_TOKENS="${MAX_NEW_TOKENS:-1024}"
 TRACE_ANSWER_MAX_NEW_TOKENS="${TRACE_ANSWER_MAX_NEW_TOKENS:-96}"
 TORCH_DTYPE="${TORCH_DTYPE:-bf16}"
 DEVICE_MAP="${DEVICE_MAP:-auto}"
@@ -32,6 +32,7 @@ mkdir -p \
 
 echo "Task 3 real_trace_v0 checkpoint-10 pilot"
 echo "limit=$LIMIT"
+echo "max_new_tokens=$MAX_NEW_TOKENS"
 echo "estimated_prefix_generations=$((LIMIT * 3))"
 echo "extract_all_token=$EXTRACT_ALL_TOKEN"
 
