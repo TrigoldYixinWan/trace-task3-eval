@@ -26,6 +26,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "output_dir": "outputs/checkpoints/rlfr/probe_lambda05_step30",
     "probe_path": "/workspace/probes/label_best_layer",
     "probe_architecture": "linear",
+    "probe_model_key": None,
     "probe_hidden_size": 2048,
     "probe_layer_idx": 8,
     "probe_pooling_method": "completion_mean_pool",
@@ -332,9 +333,11 @@ def train_grpo_rlfr(config: dict[str, Any]) -> dict[str, str]:
         layer_idx=int(config["probe_layer_idx"]),
         pooling_method=str(config["probe_pooling_method"]),
         feature_normalization=config.get("feature_normalization"),
+        model_key=config.get("probe_model_key"),
         allow_dummy=allow_dummy,
     )
-    probe.model.to(_model_device(model))
+    if hasattr(probe.model, "to"):
+        probe.model.to(_model_device(model))
 
     reward_log_path = Path("outputs/rlfr_logs") / f"{config['run_name']}_reward_breakdown.jsonl"
     reward_func = _build_reward_func(model, tokenizer, probe, config, reward_log_path)
@@ -369,6 +372,7 @@ def main() -> None:
     parser.add_argument("--train_dataset_path")
     parser.add_argument("--output_dir")
     parser.add_argument("--probe_path")
+    parser.add_argument("--probe_model_key")
     parser.add_argument("--probe_layer_idx", type=int)
     parser.add_argument("--probe_pooling_method")
     parser.add_argument("--lambda_probe", type=float)

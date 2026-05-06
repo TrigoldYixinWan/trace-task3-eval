@@ -91,7 +91,9 @@ Inspect the copied files:
 find /workspace/probes/label_best_layer -maxdepth 1 -type f | sort
 ```
 
-The loader accepts either an exact probe file or the directory itself. If multiple `.pt`, `.pth`, or `.bin` files exist, set `PROBE_PATH` to the exact probe checkpoint file.
+The loader accepts either an exact probe file or the directory itself. It supports PyTorch `.pt/.pth/.bin` probes and sklearn `.pkl` probes. If multiple candidates exist, set `PROBE_PATH` to the exact probe checkpoint file.
+
+If the `.pkl` is the Task3 probe bundle produced by `train_probe.py`, the RLFR loader defaults to `probe_model_key=activation_only`. Online RLFR reward can directly use an activation-only probe. A `hybrid` probe usually expects behavior features plus activation features and will fail the dimension check unless you intentionally provide that exact feature vector.
 
 ## Expected Outputs
 
@@ -135,6 +137,19 @@ Run the RLFR probe-penalty pilot:
 ```bash
 PROBE_PATH=/workspace/probes/label_best_layer \
 bash scripts/run_rlfr_pilot_lambda05.sh
+```
+
+For a sklearn bundle, you can force the activation-only model key:
+
+```bash
+PROBE_PATH=/workspace/probes/label_best_layer/probe_model.pkl \
+python -m task3_eval.rlfr.probe_loader \
+  --probe_path "$PROBE_PATH" \
+  --probe_model_key activation_only \
+  --layer_idx 8 \
+  --pooling_method completion_mean_pool \
+  --hidden_size 2048 \
+  --dry_run
 ```
 
 To run post-training Task3 evaluation immediately after a pilot:

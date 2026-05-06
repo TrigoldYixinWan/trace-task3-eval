@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import pickle
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -13,8 +14,11 @@ from task3_eval.utils.cli import parse_bool
 
 DEFAULT_HIDDEN_SIZE = 2048
 DEFAULT_POOLING_METHOD = "completion_mean_pool"
-PROBE_EXTENSIONS = (".pt", ".pth", ".bin")
+PROBE_EXTENSIONS = (".pt", ".pth", ".bin", ".pkl")
 PREFERRED_PROBE_FILENAMES = (
+    "probe_model.pkl",
+    "label_best_layer.pkl",
+    "best_probe.pkl",
     "probe.pt",
     "probe_model.pt",
     "best_probe.pt",
@@ -75,6 +79,9 @@ class FrozenProbe:
     feature_std: Any | None = None
     threshold: float | None = None
     is_dummy: bool = False
+    is_sklearn: bool = False
+    sklearn_model_key: str | None = None
+    detected_input_dim: int | None = None
 
     def predict_p_hack(self, features: Any) -> Any:
         """Return p_hack in [0, 1] for each feature row."""
@@ -84,6 +91,19 @@ class FrozenProbe:
         if self.is_dummy:
             return torch.zeros(features.shape[0], dtype=torch.float32, device=features.device)
         normalized = self.normalize(features)
+        if self.is_sklearn:
+            matrix = normalized.detach().float().cpu().numpy()
+            expected_dim = self.detected_input_dim or self.input_dim
+            if matrix.ndim != 2:
+                raise ValueError(f"Probe features must be rank-2, got shape={matrix.shape}")
+            if expected_dim and matrix.shape[1] != expected_dim:
+                raise ValueError(
+                    f"Sklearn probe expected input_dim={expected_dim}, got feature_dim={matrix.shape[1]}. "
+                    "This often means the pkl probe is behavior-only/hybrid instead of activation-only, "
+                    "or the online layer/pooling setting does not match probe training."
+                )
+            probabilities = _predict_sklearn_probability(self.model, matrix)
+            return torch.as_tensor(probabilities, dtype=torch.float32, device=features.device).clamp(0.0, 1.0)
         with torch.no_grad():
             logits = self.model(normalized)
         return torch.sigmoid(logits.float()).clamp(0.0, 1.0)
@@ -177,6 +197,113 @@ def _metadata_value(metadata: dict[str, Any], *keys: str) -> Any:
     return None
 
 
+def _select_sklearn_model(loaded: Any, model_key: str | None = None) -> tuple[Any, str | None, dict[str, Any]]:
+    metadata: dict[str, Any] = {}
+    if isinstance(loaded, dict) and "models" in loaded:
+        models = loaded["models"]
+        if not isinstance(models, dict) or not models:
+            raise ValueError("Sklearn probe bundle contains an empty or invalid 'models' mapping.")
+        metadata.update({key: value for key, value in loaded.items() if key != "models"})
+        key = model_key
+        if key is None:
+            key = "activation_only" if "activation_only" in models else loaded.get("default_model")
+        if key is None:
+            key = next(iter(models))
+        if key not in models:
+            raise ValueError(f"model_key={key!r} not found in sklearn probe bundle. Available: {sorted(models)}")
+        return models[key], str(key), metadata
+    return loaded, model_key, metadata
+
+
+def _predict_sklearn_probability(model: Any, matrix: Any) -> Any:
+    import numpy as np
+
+    if hasattr(model, "score_features"):
+        return np.asarray(model.score_features(matrix), dtype=float)
+    if hasattr(model, "predict_proba"):
+        probabilities = model.predict_proba(matrix)
+        classes = list(getattr(model, "classes_", []))
+        if 1 in classes:
+            return probabilities[:, classes.index(1)]
+        if probabilities.shape[1] == 1 and classes == [1]:
+            return probabilities[:, 0]
+        if probabilities.shape[1] == 1:
+            return np.zeros(matrix.shape[0], dtype=float)
+        return probabilities[:, -1]
+    if hasattr(model, "decision_function"):
+        logits = model.decision_function(matrix)
+        return 1.0 / (1.0 + np.exp(-logits))
+    if hasattr(model, "predict"):
+        return np.asarray(model.predict(matrix), dtype=float)
+    raise ValueError("Loaded sklearn probe does not expose predict_proba, decision_function, or predict.")
+
+
+def _sklearn_input_dim(model: Any) -> int | None:
+    value = getattr(model, "n_features_in_", None)
+    if value is not None:
+        return int(value)
+    steps = getattr(model, "steps", None)
+    if steps:
+        for _, step in steps:
+            value = getattr(step, "n_features_in_", None)
+            if value is not None:
+                return int(value)
+    return None
+
+
+def _load_sklearn_probe(
+    path: Path,
+    metadata: dict[str, Any],
+    hidden_size: int,
+    layer_idx: int | None,
+    pooling_method: str | None,
+    feature_normalization: str | None,
+    threshold: float | None,
+    model_key: str | None,
+) -> FrozenProbe:
+    with path.open("rb") as handle:
+        loaded = pickle.load(handle)
+    model, selected_key, bundle_metadata = _select_sklearn_model(loaded, model_key)
+    metadata = {**metadata, **bundle_metadata}
+    resolved_hidden_size = int(_metadata_value(metadata, "hidden_size", "input_dim") or hidden_size)
+    detected_dim = _sklearn_input_dim(model)
+    resolved_layer = _metadata_value(metadata, "layer_idx", "probe_layer_idx", "layer")
+    resolved_pooling = _metadata_value(metadata, "pooling_method", "probe_pooling_method", "pooling")
+    if layer_idx is not None:
+        resolved_layer = layer_idx
+    if pooling_method is not None:
+        resolved_pooling = pooling_method
+    if resolved_layer is None or resolved_pooling is None:
+        raise ValueError(
+            "Sklearn probe feature definition is incomplete. Provide layer_idx and pooling_method "
+            "or include them in probe metadata."
+        )
+    normalization = feature_normalization
+    if normalization is None:
+        normalization = _metadata_value(metadata, "feature_normalization", "normalization")
+    resolved_threshold = threshold if threshold is not None else _metadata_value(metadata, "threshold")
+    if detected_dim is not None and detected_dim != resolved_hidden_size:
+        raise ValueError(
+            f"Sklearn probe input_dim={detected_dim}, but hidden_size/config input_dim={resolved_hidden_size}. "
+            "For online RLFR, use an activation-only probe whose input dimension equals the selected hidden size, "
+            "or set --hidden_size to the exact expected feature dimension if that is intentional."
+        )
+    return FrozenProbe(
+        model=model,
+        probe_path=str(path),
+        architecture="sklearn",
+        input_dim=detected_dim or resolved_hidden_size,
+        layer_idx=int(resolved_layer),
+        pooling_method=str(resolved_pooling),
+        feature_normalization=str(normalization) if normalization else None,
+        threshold=float(resolved_threshold) if resolved_threshold is not None else None,
+        is_dummy=False,
+        is_sklearn=True,
+        sklearn_model_key=selected_key,
+        detected_input_dim=detected_dim,
+    )
+
+
 def load_frozen_probe(
     probe_path: str | None,
     probe_architecture: str = "linear",
@@ -185,6 +312,7 @@ def load_frozen_probe(
     pooling_method: str | None = None,
     feature_normalization: str | None = None,
     threshold: float | None = None,
+    model_key: str | None = None,
     allow_dummy: bool = False,
     map_location: str = "cpu",
     verbose: bool = True,
@@ -231,12 +359,27 @@ def load_frozen_probe(
             )
         raise FileNotFoundError(f"Probe checkpoint not found: {path}")
 
+    sidecar_metadata = _load_sidecar_metadata(path)
+    if path.suffix.lower() == ".pkl" or probe_architecture == "sklearn":
+        handle = _load_sklearn_probe(
+            path=path,
+            metadata=sidecar_metadata,
+            hidden_size=hidden_size,
+            layer_idx=layer_idx,
+            pooling_method=pooling_method,
+            feature_normalization=feature_normalization,
+            threshold=threshold,
+            model_key=model_key,
+        )
+        if verbose:
+            print_probe_diagnostics(handle)
+        return handle
+
     if probe_architecture != "linear":
-        raise ValueError("Only probe_architecture='linear' is implemented for Task5 pilot.")
+        raise ValueError("probe_architecture must be 'linear' or 'sklearn'.")
 
     raw = torch.load(path, map_location=map_location)
     state_dict, checkpoint_metadata = _extract_checkpoint_parts(raw)
-    sidecar_metadata = _load_sidecar_metadata(path)
     metadata = {**sidecar_metadata, **checkpoint_metadata}
 
     resolved_hidden_size = int(_metadata_value(metadata, "hidden_size", "input_dim") or hidden_size)
@@ -290,8 +433,13 @@ def print_probe_diagnostics(probe: FrozenProbe) -> None:
     print(f"layer_idx={probe.layer_idx}")
     print(f"pooling_method={probe.pooling_method}")
     print(f"input_dim={probe.input_dim}")
+    if probe.detected_input_dim is not None:
+        print(f"detected_input_dim={probe.detected_input_dim}")
+    if probe.sklearn_model_key:
+        print(f"sklearn_model_key={probe.sklearn_model_key}")
     print(f"normalization_used={bool(probe.feature_normalization and probe.feature_normalization != 'none')}")
     print(f"is_dummy={probe.is_dummy}")
+    print(f"is_sklearn={probe.is_sklearn}")
 
 
 def main() -> None:
@@ -303,6 +451,7 @@ def main() -> None:
     parser.add_argument("--pooling_method", default=DEFAULT_POOLING_METHOD)
     parser.add_argument("--feature_normalization")
     parser.add_argument("--threshold", type=float)
+    parser.add_argument("--probe_model_key")
     parser.add_argument("--allow_dummy_probe", nargs="?", const=True, default=False, type=parse_bool)
     parser.add_argument("--dry_run", "--dry-run", nargs="?", const=True, default=False, type=parse_bool)
     args = parser.parse_args()
@@ -314,6 +463,7 @@ def main() -> None:
         pooling_method=args.pooling_method,
         feature_normalization=args.feature_normalization,
         threshold=args.threshold,
+        model_key=args.probe_model_key,
         allow_dummy=args.allow_dummy_probe,
     )
     if args.dry_run:
