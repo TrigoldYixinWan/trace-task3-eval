@@ -3,7 +3,7 @@ base_model_name: Qwen/Qwen2.5-3B-Instruct
 start_checkpoint_path: /workspace/checkpoints/hacking/checkpoint-50
 train_dataset_path: /workspace/data/math_ic_train.jsonl
 output_dir: outputs/checkpoints/rlfr/probe_lambda05_step30
-probe_path: /workspace/probes/layer8_probe.pt
+probe_path: /workspace/probes/label_best_layer
 probe_layer_idx: 8
 probe_pooling_method: completion_mean_pool
 lambda_probe: 0.5

@@ -24,7 +24,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "start_checkpoint_path": "/workspace/checkpoints/hacking/checkpoint-50",
     "train_dataset_path": "/workspace/data/math_ic_train.jsonl",
     "output_dir": "outputs/checkpoints/rlfr/probe_lambda05_step30",
-    "probe_path": "/workspace/probes/layer8_probe.pt",
+    "probe_path": "/workspace/probes/label_best_layer",
     "probe_architecture": "linear",
     "probe_hidden_size": 2048,
     "probe_layer_idx": 8,

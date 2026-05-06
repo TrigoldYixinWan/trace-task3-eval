@@ -54,7 +54,7 @@ configs/rlfr_pilot_lambda05.yaml
 /workspace/checkpoints/hacking/checkpoint-50
 /workspace/data/math_ic_train.jsonl
 /workspace/data/math_ic_test.jsonl
-/workspace/probes/layer8_probe.pt
+/workspace/probes/label_best_layer
 ```
 
 The real probe metadata must match the online extractor:
@@ -66,6 +66,32 @@ hidden_size=2048
 ```
 
 If the trained probe uses a different layer, pooling method, or normalization, edit the YAML before training.
+
+## Sync Probe From Google Drive
+
+The current trained probe artifact is expected under Google Drive:
+
+```text
+gdrive:CS2952N_TRACE_Task3/probes/label_best_layer
+```
+
+Copy it into the RunPod workspace:
+
+```bash
+mkdir -p /workspace/probes/label_best_layer
+rclone copy \
+  gdrive:CS2952N_TRACE_Task3/probes/label_best_layer \
+  /workspace/probes/label_best_layer \
+  --progress
+```
+
+Inspect the copied files:
+
+```bash
+find /workspace/probes/label_best_layer -maxdepth 1 -type f | sort
+```
+
+The loader accepts either an exact probe file or the directory itself. If multiple `.pt`, `.pth`, or `.bin` files exist, set `PROBE_PATH` to the exact probe checkpoint file.
 
 ## Expected Outputs
 
@@ -107,7 +133,7 @@ bash scripts/run_rlfr_pilot_lambda0.sh
 Run the RLFR probe-penalty pilot:
 
 ```bash
-PROBE_PATH=/workspace/probes/layer8_probe.pt \
+PROBE_PATH=/workspace/probes/label_best_layer \
 bash scripts/run_rlfr_pilot_lambda05.sh
 ```
 

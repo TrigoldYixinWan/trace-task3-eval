@@ -2,12 +2,12 @@
 set -euo pipefail
 
 CONFIG_PATH="${CONFIG_PATH:-configs/rlfr_pilot_lambda05.yaml}"
-PROBE_PATH="${PROBE_PATH:-/workspace/probes/layer8_probe.pt}"
+PROBE_PATH="${PROBE_PATH:-/workspace/probes/label_best_layer}"
 OUTPUT_DIR="${OUTPUT_DIR:-outputs/checkpoints/rlfr/probe_lambda05_step30}"
 
-if [[ ! -f "$PROBE_PATH" && "${ALLOW_DUMMY_PROBE:-0}" != "1" ]]; then
+if [[ ! -e "$PROBE_PATH" && "${ALLOW_DUMMY_PROBE:-0}" != "1" ]]; then
   echo "Probe checkpoint is required for lambda05 pilot: $PROBE_PATH" >&2
-  echo "Set PROBE_PATH=/path/to/probe.pt or ALLOW_DUMMY_PROBE=1 for smoke-only experiments." >&2
+  echo "Set PROBE_PATH=/path/to/probe.pt or PROBE_PATH=/path/to/probe_dir, or ALLOW_DUMMY_PROBE=1 for smoke-only experiments." >&2
   exit 2
 fi
 

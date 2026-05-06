@@ -13,6 +13,15 @@ from task3_eval.utils.cli import parse_bool
 
 DEFAULT_HIDDEN_SIZE = 2048
 DEFAULT_POOLING_METHOD = "completion_mean_pool"
+PROBE_EXTENSIONS = (".pt", ".pth", ".bin")
+PREFERRED_PROBE_FILENAMES = (
+    "probe.pt",
+    "probe_model.pt",
+    "best_probe.pt",
+    "linear_probe.pt",
+    "label_best_layer.pt",
+    "model.pt",
+)
 
 
 class LinearProbe:
@@ -101,6 +110,39 @@ def _load_sidecar_metadata(probe_path: Path) -> dict[str, Any]:
     return {}
 
 
+def resolve_probe_checkpoint_path(probe_path: str | Path) -> Path:
+    """Resolve either a probe checkpoint file or a directory containing one."""
+
+    path = Path(probe_path)
+    if path.is_file():
+        return path
+    if not path.is_dir():
+        return path
+    preferred = [path / filename for filename in PREFERRED_PROBE_FILENAMES]
+    for candidate in preferred:
+        if candidate.exists() and candidate.is_file():
+            return candidate
+    candidates = sorted(
+        candidate
+        for candidate in path.iterdir()
+        if candidate.is_file()
+        and candidate.suffix.lower() in PROBE_EXTENSIONS
+        and "optimizer" not in candidate.name.lower()
+        and "scheduler" not in candidate.name.lower()
+    )
+    if len(candidates) == 1:
+        return candidates[0]
+    if not candidates:
+        raise FileNotFoundError(
+            f"No probe checkpoint found in {path}. Expected one of {PROBE_EXTENSIONS}."
+        )
+    names = ", ".join(candidate.name for candidate in candidates)
+    raise ValueError(
+        f"Multiple probe checkpoint candidates found in {path}: {names}. "
+        "Set PROBE_PATH to the exact file."
+    )
+
+
 def _extract_checkpoint_parts(raw: Any) -> tuple[dict[str, Any], dict[str, Any]]:
     if not isinstance(raw, dict):
         return raw, {}
@@ -172,7 +214,7 @@ def load_frozen_probe(
             print_probe_diagnostics(handle)
         return handle
 
-    path = Path(probe_path)
+    path = resolve_probe_checkpoint_path(probe_path)
     if not path.exists():
         if allow_dummy:
             return load_frozen_probe(
