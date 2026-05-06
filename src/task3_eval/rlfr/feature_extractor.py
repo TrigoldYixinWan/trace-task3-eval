@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 from dataclasses import dataclass
+from collections.abc import Sequence
 from typing import Any
 
 
@@ -16,8 +17,8 @@ class ExtractedFeature:
     input_token_length: int
     completion_start: int
     completion_end: int
-    layer_idx: int
-    pooling_method: str
+    layer_idx: int | list[int]
+    pooling_method: str | list[str]
 
 
 def format_prompt_for_generation(tokenizer: Any, prompt: str) -> str:
@@ -39,8 +40,6 @@ def _model_device(model: Any) -> Any:
 
 
 def _pool_completion(hidden: Any, completion_start: int, completion_end: int, pooling_method: str) -> Any:
-    import torch
-
     if completion_end <= completion_start:
         completion_start = max(0, hidden.shape[1] - 1)
         completion_end = hidden.shape[1]
@@ -56,25 +55,51 @@ def _pool_completion(hidden: Any, completion_start: int, completion_end: int, po
     raise ValueError(f"Unsupported pooling_method: {pooling_method}")
 
 
+def parse_layer_indices(value: int | str | Sequence[int] | None) -> list[int]:
+    if value is None:
+        raise ValueError("layer_idx/layer_indices is required.")
+    if isinstance(value, int):
+        return [value]
+    if isinstance(value, str):
+        pieces = [piece.strip() for piece in value.split(",") if piece.strip()]
+        if not pieces:
+            raise ValueError("layer_indices string is empty.")
+        return [int(piece) for piece in pieces]
+    return [int(item) for item in value]
+
+
+def parse_pooling_methods(value: str | Sequence[str]) -> list[str]:
+    if isinstance(value, str):
+        pieces = [piece.strip() for piece in value.split(",") if piece.strip()]
+    else:
+        pieces = [str(piece).strip() for piece in value if str(piece).strip()]
+    if not pieces:
+        raise ValueError("pooling_method is required.")
+    invalid = [piece for piece in pieces if piece not in SUPPORTED_POOLING]
+    if invalid:
+        raise ValueError(f"Unsupported pooling_method(s): {invalid}. Supported: {sorted(SUPPORTED_POOLING)}")
+    return pieces
+
+
 def extract_probe_feature(
     prompt: str,
     completion: str,
     tokenizer: Any,
     model: Any,
-    layer_idx: int,
-    pooling_method: str,
+    layer_idx: int | str | Sequence[int],
+    pooling_method: str | Sequence[str],
     max_seq_len: int | None = None,
     debug: bool = False,
 ) -> ExtractedFeature:
-    """Extract the single hidden-state feature expected by the frozen probe.
+    """Extract the hidden-state feature expected by the frozen probe.
 
     This safe pilot implementation uses output_hidden_states=True, immediately
-    selects one layer, and never stores hidden states outside the returned
-    pooled feature.
+    selects only requested layers, and never stores hidden states outside the
+    returned pooled feature.
     """
 
-    if pooling_method not in SUPPORTED_POOLING:
-        raise ValueError(f"pooling_method must be one of: {sorted(SUPPORTED_POOLING)}")
+    layer_indices = parse_layer_indices(layer_idx)
+    pooling_methods = parse_pooling_methods(pooling_method)
 
     import torch
 
@@ -97,10 +122,16 @@ def extract_probe_feature(
     with torch.no_grad():
         outputs = model(**full_inputs, output_hidden_states=True, use_cache=False)
         hidden_states = outputs.hidden_states
-        if layer_idx < 0 or layer_idx >= len(hidden_states):
-            raise IndexError(f"layer_idx={layer_idx} out of range for {len(hidden_states)} hidden-state tensors.")
-        selected_hidden = hidden_states[layer_idx]
-        features = _pool_completion(selected_hidden, completion_start, completion_end, pooling_method)
+        pooled_parts = []
+        for selected_layer in layer_indices:
+            if selected_layer < 0 or selected_layer >= len(hidden_states):
+                raise IndexError(
+                    f"layer_idx={selected_layer} out of range for {len(hidden_states)} hidden-state tensors."
+                )
+            selected_hidden = hidden_states[selected_layer]
+            for selected_pooling in pooling_methods:
+                pooled_parts.append(_pool_completion(selected_hidden, completion_start, completion_end, selected_pooling))
+        features = pooled_parts[0] if len(pooled_parts) == 1 else torch.cat(pooled_parts, dim=-1)
         features = features.detach()
     if was_training:
         model.train()
@@ -109,16 +140,16 @@ def extract_probe_feature(
         print(f"input_token_length={completion_end}")
         print(f"completion_token_range={completion_start}:{completion_end}")
         print(f"extracted_feature_shape={tuple(features.shape)}")
-        print(f"layer_idx={layer_idx}")
-        print(f"pooling_method={pooling_method}")
+        print(f"layer_idx={layer_indices}")
+        print(f"pooling_method={pooling_methods}")
 
     return ExtractedFeature(
         features=features,
         input_token_length=completion_end,
         completion_start=completion_start,
         completion_end=completion_end,
-        layer_idx=layer_idx,
-        pooling_method=pooling_method,
+        layer_idx=layer_indices[0] if len(layer_indices) == 1 else layer_indices,
+        pooling_method=pooling_methods[0] if len(pooling_methods) == 1 else pooling_methods,
     )
 
 

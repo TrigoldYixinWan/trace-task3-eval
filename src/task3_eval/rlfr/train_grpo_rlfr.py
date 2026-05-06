@@ -29,6 +29,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "probe_model_key": None,
     "probe_hidden_size": 2048,
     "probe_layer_idx": 8,
+    "probe_layer_indices": None,
     "probe_pooling_method": "completion_mean_pool",
     "feature_normalization": None,
     "lambda_probe": 0.5,
@@ -283,7 +284,7 @@ def print_run_summary(config: dict[str, Any]) -> None:
     print(f"start_checkpoint_path={config.get('start_checkpoint_path')}")
     print(f"lambda_probe={config['lambda_probe']}")
     print(f"probe_path={config.get('probe_path')}")
-    print(f"probe_layer_idx={config['probe_layer_idx']}")
+    print(f"probe_layer_idx={config.get('probe_layer_indices') or config['probe_layer_idx']}")
     print(f"probe_pooling_method={config['probe_pooling_method']}")
     print(f"max_steps={config['max_steps']}")
     print(f"max_completion_length={config['max_completion_length']}")
@@ -326,12 +327,15 @@ def train_grpo_rlfr(config: dict[str, Any]) -> dict[str, str]:
     dataset = Dataset.from_list(records)
     model, tokenizer = _load_policy_model_and_tokenizer(config)
     allow_dummy = bool(config.get("allow_dummy_probe", False)) or float(config["lambda_probe"]) == 0.0
+    layer_spec = config.get("probe_layer_indices")
+    if layer_spec in (None, "", "null"):
+        layer_spec = config["probe_layer_idx"]
     probe = load_frozen_probe(
         probe_path=config.get("probe_path"),
         probe_architecture=config.get("probe_architecture", "linear"),
         hidden_size=int(config.get("probe_hidden_size", 2048)),
-        layer_idx=int(config["probe_layer_idx"]),
-        pooling_method=str(config["probe_pooling_method"]),
+        layer_idx=layer_spec,
+        pooling_method=config["probe_pooling_method"],
         feature_normalization=config.get("feature_normalization"),
         model_key=config.get("probe_model_key"),
         allow_dummy=allow_dummy,
@@ -374,6 +378,7 @@ def main() -> None:
     parser.add_argument("--probe_path")
     parser.add_argument("--probe_model_key")
     parser.add_argument("--probe_layer_idx", type=int)
+    parser.add_argument("--probe_layer_indices")
     parser.add_argument("--probe_pooling_method")
     parser.add_argument("--lambda_probe", type=float)
     parser.add_argument("--max_steps", type=int)

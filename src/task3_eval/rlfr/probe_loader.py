@@ -9,14 +9,20 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from task3_eval.rlfr.feature_extractor import parse_layer_indices, parse_pooling_methods
 from task3_eval.utils.cli import parse_bool
 
 
 DEFAULT_HIDDEN_SIZE = 2048
 DEFAULT_POOLING_METHOD = "completion_mean_pool"
-PROBE_EXTENSIONS = (".pt", ".pth", ".bin", ".pkl")
+PROBE_EXTENSIONS = (".pt", ".pth", ".bin", ".pkl", ".pk")
 PREFERRED_PROBE_FILENAMES = (
+    "probe_4_layers.pk",
+    "probe_4_layers.pkl",
+    "trace_probe_4_layers.pk",
+    "trace_probe_4_layers.pkl",
     "probe_model.pkl",
+    "probe_model.pk",
     "label_best_layer.pkl",
     "best_probe.pkl",
     "probe.pt",
@@ -72,8 +78,8 @@ class FrozenProbe:
     probe_path: str | None
     architecture: str
     input_dim: int
-    layer_idx: int
-    pooling_method: str
+    layer_idx: int | list[int]
+    pooling_method: str | list[str]
     feature_normalization: str | None = None
     feature_mean: Any | None = None
     feature_std: Any | None = None
@@ -197,6 +203,10 @@ def _metadata_value(metadata: dict[str, Any], *keys: str) -> Any:
     return None
 
 
+def _feature_dim(hidden_size: int, layer_idx: int | str | list[int], pooling_method: str | list[str]) -> int:
+    return int(hidden_size) * len(parse_layer_indices(layer_idx)) * len(parse_pooling_methods(pooling_method))
+
+
 def _select_sklearn_model(loaded: Any, model_key: str | None = None) -> tuple[Any, str | None, dict[str, Any]]:
     metadata: dict[str, Any] = {}
     if isinstance(loaded, dict) and "models" in loaded:
@@ -255,8 +265,8 @@ def _load_sklearn_probe(
     path: Path,
     metadata: dict[str, Any],
     hidden_size: int,
-    layer_idx: int | None,
-    pooling_method: str | None,
+    layer_idx: int | str | list[int] | None,
+    pooling_method: str | list[str] | None,
     feature_normalization: str | None,
     threshold: float | None,
     model_key: str | None,
@@ -281,10 +291,14 @@ def _load_sklearn_probe(
                 ) from joblib_error
     model, selected_key, bundle_metadata = _select_sklearn_model(loaded, model_key)
     metadata = {**metadata, **bundle_metadata}
-    resolved_hidden_size = int(_metadata_value(metadata, "hidden_size", "input_dim") or hidden_size)
+    resolved_hidden_size = int(_metadata_value(metadata, "hidden_size") or hidden_size)
     detected_dim = _sklearn_input_dim(model)
     resolved_layer = _metadata_value(metadata, "layer_idx", "probe_layer_idx", "layer")
+    if resolved_layer is None:
+        resolved_layer = _metadata_value(metadata, "layer_indices", "probe_layer_indices", "layers")
     resolved_pooling = _metadata_value(metadata, "pooling_method", "probe_pooling_method", "pooling")
+    if resolved_pooling is None:
+        resolved_pooling = _metadata_value(metadata, "pooling_methods", "probe_pooling_methods")
     if layer_idx is not None:
         resolved_layer = layer_idx
     if pooling_method is not None:
@@ -294,23 +308,27 @@ def _load_sklearn_probe(
             "Sklearn probe feature definition is incomplete. Provide layer_idx and pooling_method "
             "or include them in probe metadata."
         )
+    layer_indices = parse_layer_indices(resolved_layer)
+    pooling_methods = parse_pooling_methods(resolved_pooling)
     normalization = feature_normalization
     if normalization is None:
         normalization = _metadata_value(metadata, "feature_normalization", "normalization")
     resolved_threshold = threshold if threshold is not None else _metadata_value(metadata, "threshold")
-    if detected_dim is not None and detected_dim != resolved_hidden_size:
+    expected_feature_dim = _feature_dim(resolved_hidden_size, layer_indices, pooling_methods)
+    if detected_dim is not None and detected_dim != expected_feature_dim:
         raise ValueError(
-            f"Sklearn probe input_dim={detected_dim}, but hidden_size/config input_dim={resolved_hidden_size}. "
-            "For online RLFR, use an activation-only probe whose input dimension equals the selected hidden size, "
-            "or set --hidden_size to the exact expected feature dimension if that is intentional."
+            f"Sklearn probe input_dim={detected_dim}, but online feature_dim={expected_feature_dim} "
+            f"from hidden_size={resolved_hidden_size}, layers={layer_indices}, pooling={pooling_methods}. "
+            "Adjust --layer_indices/--pooling_method/--hidden_size to match probe training. "
+            "If this is a hybrid or behavior-only probe, it cannot be used directly for online RLFR reward."
         )
     return FrozenProbe(
         model=model,
         probe_path=str(path),
         architecture="sklearn",
-        input_dim=detected_dim or resolved_hidden_size,
-        layer_idx=int(resolved_layer),
-        pooling_method=str(resolved_pooling),
+        input_dim=detected_dim or expected_feature_dim,
+        layer_idx=layer_indices[0] if len(layer_indices) == 1 else layer_indices,
+        pooling_method=pooling_methods[0] if len(pooling_methods) == 1 else pooling_methods,
         feature_normalization=str(normalization) if normalization else None,
         threshold=float(resolved_threshold) if resolved_threshold is not None else None,
         is_dummy=False,
@@ -324,8 +342,8 @@ def load_frozen_probe(
     probe_path: str | None,
     probe_architecture: str = "linear",
     hidden_size: int = DEFAULT_HIDDEN_SIZE,
-    layer_idx: int | None = None,
-    pooling_method: str | None = None,
+    layer_idx: int | str | list[int] | None = None,
+    pooling_method: str | list[str] | None = None,
     feature_normalization: str | None = None,
     threshold: float | None = None,
     model_key: str | None = None,
@@ -340,16 +358,18 @@ def load_frozen_probe(
     if probe_path in (None, "", "null"):
         if not allow_dummy:
             raise FileNotFoundError("probe_path is required unless allow_dummy=True.")
-        resolved_layer = 0 if layer_idx is None else int(layer_idx)
+        resolved_layer = 0 if layer_idx is None else layer_idx
         resolved_pooling = pooling_method or DEFAULT_POOLING_METHOD
+        resolved_layers = parse_layer_indices(resolved_layer)
+        resolved_pooling_methods = parse_pooling_methods(resolved_pooling)
         probe = DummyProbe().eval().requires_grad_(False)
         handle = FrozenProbe(
             model=probe,
             probe_path=None,
             architecture="dummy",
             input_dim=int(hidden_size),
-            layer_idx=resolved_layer,
-            pooling_method=resolved_pooling,
+            layer_idx=resolved_layers[0] if len(resolved_layers) == 1 else resolved_layers,
+            pooling_method=resolved_pooling_methods[0] if len(resolved_pooling_methods) == 1 else resolved_pooling_methods,
             feature_normalization=None,
             threshold=threshold,
             is_dummy=True,
@@ -376,7 +396,7 @@ def load_frozen_probe(
         raise FileNotFoundError(f"Probe checkpoint not found: {path}")
 
     sidecar_metadata = _load_sidecar_metadata(path)
-    if path.suffix.lower() == ".pkl" or probe_architecture == "sklearn":
+    if path.suffix.lower() in {".pkl", ".pk"} or probe_architecture == "sklearn":
         handle = _load_sklearn_probe(
             path=path,
             metadata=sidecar_metadata,
@@ -398,9 +418,13 @@ def load_frozen_probe(
     state_dict, checkpoint_metadata = _extract_checkpoint_parts(raw)
     metadata = {**sidecar_metadata, **checkpoint_metadata}
 
-    resolved_hidden_size = int(_metadata_value(metadata, "hidden_size", "input_dim") or hidden_size)
+    resolved_hidden_size = int(_metadata_value(metadata, "hidden_size") or hidden_size)
     resolved_layer = _metadata_value(metadata, "layer_idx", "probe_layer_idx", "layer")
+    if resolved_layer is None:
+        resolved_layer = _metadata_value(metadata, "layer_indices", "probe_layer_indices", "layers")
     resolved_pooling = _metadata_value(metadata, "pooling_method", "probe_pooling_method", "pooling")
+    if resolved_pooling is None:
+        resolved_pooling = _metadata_value(metadata, "pooling_methods", "probe_pooling_methods")
     if layer_idx is not None:
         resolved_layer = layer_idx
     if pooling_method is not None:
@@ -410,6 +434,8 @@ def load_frozen_probe(
             "Probe feature definition is incomplete. Provide layer_idx and pooling_method "
             "or include them in probe metadata."
         )
+    layer_indices = parse_layer_indices(resolved_layer)
+    pooling_methods = parse_pooling_methods(resolved_pooling)
 
     normalization = feature_normalization
     if normalization is None:
@@ -420,7 +446,8 @@ def load_frozen_probe(
     feature_std = torch.as_tensor(std, dtype=torch.float32) if std is not None else None
     resolved_threshold = threshold if threshold is not None else _metadata_value(metadata, "threshold")
 
-    probe = LinearProbe(resolved_hidden_size)
+    expected_feature_dim = _feature_dim(resolved_hidden_size, layer_indices, pooling_methods)
+    probe = LinearProbe(expected_feature_dim)
     probe.load_state_dict(_state_dict_for_linear_probe(state_dict), strict=False)
     probe.eval()
     probe.requires_grad_(False)
@@ -429,9 +456,9 @@ def load_frozen_probe(
         model=probe,
         probe_path=str(path),
         architecture=probe_architecture,
-        input_dim=resolved_hidden_size,
-        layer_idx=int(resolved_layer),
-        pooling_method=str(resolved_pooling),
+        input_dim=expected_feature_dim,
+        layer_idx=layer_indices[0] if len(layer_indices) == 1 else layer_indices,
+        pooling_method=pooling_methods[0] if len(pooling_methods) == 1 else pooling_methods,
         feature_normalization=str(normalization) if normalization else None,
         feature_mean=feature_mean,
         feature_std=feature_std,
@@ -464,6 +491,7 @@ def main() -> None:
     parser.add_argument("--probe_architecture", default="linear")
     parser.add_argument("--hidden_size", type=int, default=DEFAULT_HIDDEN_SIZE)
     parser.add_argument("--layer_idx", type=int)
+    parser.add_argument("--layer_indices")
     parser.add_argument("--pooling_method", default=DEFAULT_POOLING_METHOD)
     parser.add_argument("--feature_normalization")
     parser.add_argument("--threshold", type=float)
@@ -475,7 +503,7 @@ def main() -> None:
         probe_path=args.probe_path,
         probe_architecture=args.probe_architecture,
         hidden_size=args.hidden_size,
-        layer_idx=args.layer_idx,
+        layer_idx=args.layer_indices if args.layer_indices is not None else args.layer_idx,
         pooling_method=args.pooling_method,
         feature_normalization=args.feature_normalization,
         threshold=args.threshold,
