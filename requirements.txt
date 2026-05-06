@@ -13,6 +13,7 @@ safetensors
 pandas
 numpy
 scikit-learn
+joblib
 tqdm
 pyyaml
 rich

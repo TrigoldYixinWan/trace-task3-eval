@@ -262,7 +262,23 @@ def _load_sklearn_probe(
     model_key: str | None,
 ) -> FrozenProbe:
     with path.open("rb") as handle:
-        loaded = pickle.load(handle)
+        try:
+            loaded = pickle.load(handle)
+        except Exception as pickle_error:
+            try:
+                import joblib
+            except ImportError as exc:
+                raise RuntimeError(
+                    f"Could not load {path} with pickle, and joblib is not installed. "
+                    "Install joblib or re-export the probe with pickle.dump."
+                ) from exc
+            try:
+                loaded = joblib.load(path)
+            except Exception as joblib_error:
+                raise ValueError(
+                    f"Could not load sklearn probe {path} with pickle or joblib. "
+                    f"pickle_error={pickle_error!r}; joblib_error={joblib_error!r}"
+                ) from joblib_error
     model, selected_key, bundle_metadata = _select_sklearn_model(loaded, model_key)
     metadata = {**metadata, **bundle_metadata}
     resolved_hidden_size = int(_metadata_value(metadata, "hidden_size", "input_dim") or hidden_size)

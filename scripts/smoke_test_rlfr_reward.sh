@@ -22,9 +22,9 @@ echo "==> sklearn pkl probe-loader smoke"
 SMOKE_PROBE_DIR="outputs/smoke_rlfr_reward/label_best_layer"
 mkdir -p "$SMOKE_PROBE_DIR"
 "${PYTHON_CMD[@]}" - <<'PY'
-import pickle
 from pathlib import Path
 
+import joblib
 import numpy as np
 from sklearn.linear_model import LogisticRegression
 
@@ -32,8 +32,7 @@ path = Path("outputs/smoke_rlfr_reward/label_best_layer/probe_model.pkl")
 X = np.asarray([[0.0, 0.0], [1.0, 1.0], [0.1, 0.2], [0.9, 0.8]], dtype=float)
 y = np.asarray([0, 1, 0, 1], dtype=int)
 model = LogisticRegression().fit(X, y)
-with path.open("wb") as handle:
-    pickle.dump({"models": {"activation_only": model}, "default_model": "activation_only"}, handle)
+joblib.dump({"models": {"activation_only": model}, "default_model": "activation_only"}, path)
 PY
 "${PYTHON_CMD[@]}" -m task3_eval.rlfr.probe_loader \
   --probe_path "$SMOKE_PROBE_DIR" \

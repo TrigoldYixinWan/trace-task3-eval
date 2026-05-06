@@ -91,7 +91,7 @@ Inspect the copied files:
 find /workspace/probes/label_best_layer -maxdepth 1 -type f | sort
 ```
 
-The loader accepts either an exact probe file or the directory itself. It supports PyTorch `.pt/.pth/.bin` probes and sklearn `.pkl` probes. If multiple candidates exist, set `PROBE_PATH` to the exact probe checkpoint file.
+The loader accepts either an exact probe file or the directory itself. It supports PyTorch `.pt/.pth/.bin` probes and sklearn `.pkl` probes. For `.pkl`, it first tries `pickle.load` and then falls back to `joblib.load`, which is common for sklearn artifacts. If multiple candidates exist, set `PROBE_PATH` to the exact probe checkpoint file.
 
 If the `.pkl` is the Task3 probe bundle produced by `train_probe.py`, the RLFR loader defaults to `probe_model_key=activation_only`. Online RLFR reward can directly use an activation-only probe. A `hybrid` probe usually expects behavior features plus activation features and will fail the dimension check unless you intentionally provide that exact feature vector.
 
